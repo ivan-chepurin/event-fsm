@@ -55,7 +55,7 @@ func (e *Event[T]) CurrentStateName() StateName {
 
 func (e *Event[T]) NextStateName(status ResultStatus) (StateName, error) {
 	if state, err := e.state.getNext(status); err != nil {
-		return "", err
+		return nil, err
 	} else {
 		return state.Name, nil
 	}

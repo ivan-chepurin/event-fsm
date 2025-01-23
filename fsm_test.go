@@ -20,14 +20,14 @@ const (
 )
 
 // State names
-const (
-	StateNameCheckWhenPlus       StateName = "checkWhenPlus"
-	StateNameCheckWhenMinus      StateName = "checkWhenMinus"
-	StateNamePlus2               StateName = "statePlus2"
-	StateNameMinus3              StateName = "stateMinus3"
-	StateNameNeedInsertWhenPlus  StateName = "needInsertWhenPlus"
-	StateNameNeedInsertWhenMinus StateName = "needInsertWhenMinus"
-	StateNameDone                StateName = "stateDone"
+var (
+	StateNameCheckWhenPlus       = NewStateName("checkWhenPlus")
+	StateNameCheckWhenMinus      = NewStateName("checkWhenMinus")
+	StateNamePlus2               = NewStateName("statePlus2")
+	StateNameMinus3              = NewStateName("stateMinus3")
+	StateNameNeedInsertWhenPlus  = NewStateName("needInsertWhenPlus")
+	StateNameNeedInsertWhenMinus = NewStateName("needInsertWhenMinus")
+	StateNameDone                = NewStateName("stateDone")
 )
 
 // EventTypes
@@ -96,9 +96,9 @@ func TestFSM_ProcessEvent(t *testing.T) {
 	c := cache{m: make(map[string]int)}
 
 	pMap := map[string]*process{
-		"p1": {"p1", Ok, "", StateNameCheckWhenPlus},
-		"p2": {"p2", Ok, "", StateNameCheckWhenPlus},
-		"p3": {"p3", Ok, "", StateNameCheckWhenMinus},
+		"p1": {"p1", Ok, nil, StateNameCheckWhenPlus},
+		"p2": {"p2", Ok, nil, StateNameCheckWhenPlus},
+		"p3": {"p3", Ok, nil, StateNameCheckWhenMinus},
 	}
 	ch := make(chan process)
 
@@ -118,10 +118,17 @@ func TestFSM_ProcessEvent(t *testing.T) {
 			ch <- process{
 				id:           e.ID(),
 				status:       status,
-				nextState:    "",
+				nextState:    nil,
 				currentState: e.CurrentStateName(),
 			}
 		}()
+
+		p, isNull := e.Data()
+		if isNull {
+			t.Errorf("check: e.Data() failed")
+		}
+
+		t.Logf("check: id: %s, status: %d, current state: %s, next_state: %s", p.id, p.status, p.currentState, p.nextState)
 
 		// get number from cache
 		number := c.Get(e.id + cachedNum)
@@ -160,7 +167,7 @@ func TestFSM_ProcessEvent(t *testing.T) {
 			ch <- process{
 				id:           e.ID(),
 				status:       status,
-				nextState:    "",
+				nextState:    nil,
 				currentState: e.CurrentStateName(),
 			}
 		}()
@@ -191,7 +198,7 @@ func TestFSM_ProcessEvent(t *testing.T) {
 			ch <- process{
 				id:           e.ID(),
 				status:       status,
-				nextState:    "",
+				nextState:    nil,
 				currentState: e.CurrentStateName(),
 			}
 		}()
@@ -222,7 +229,7 @@ func TestFSM_ProcessEvent(t *testing.T) {
 			ch <- process{
 				id:           e.ID(),
 				status:       status,
-				nextState:    "",
+				nextState:    nil,
 				currentState: e.CurrentStateName(),
 			}
 		}()
@@ -254,7 +261,7 @@ func TestFSM_ProcessEvent(t *testing.T) {
 			ch <- process{
 				id:           e.ID(),
 				status:       status,
-				nextState:    "",
+				nextState:    nil,
 				currentState: e.CurrentStateName(),
 			}
 		}()
