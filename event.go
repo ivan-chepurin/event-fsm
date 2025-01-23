@@ -14,7 +14,7 @@ type EventData[T comparable] interface {
 type Event[T comparable] struct {
 	id string
 
-	stateName string
+	stateName StateName
 	state     *State[T]
 	prevState *State[T]
 
@@ -23,7 +23,7 @@ type Event[T comparable] struct {
 	et EventType
 }
 
-func NewEvent[T comparable](id, stateName string, data EventData[T], eventType EventType) Event[T] {
+func NewEvent[T comparable](id string, stateName StateName, data EventData[T], eventType EventType) Event[T] {
 	return Event[T]{
 		id:        id,
 		stateName: stateName,
@@ -49,11 +49,11 @@ func (e *Event[T]) GetLog() string {
 	return log
 }
 
-func (e *Event[T]) CurrentStateName() string {
+func (e *Event[T]) CurrentStateName() StateName {
 	return e.state.Name
 }
 
-func (e *Event[T]) NextStateName(status ResultStatus) (string, error) {
+func (e *Event[T]) NextStateName(status ResultStatus) (StateName, error) {
 	if state, err := e.state.getNext(status); err != nil {
 		return "", err
 	} else {

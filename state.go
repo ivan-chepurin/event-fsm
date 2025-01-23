@@ -15,18 +15,20 @@ const (
 	StateTypeWaitEvent
 )
 
+type StateName string
+
 // StateDetector is a state detector
 type StateDetector[T comparable] struct {
-	States map[string]*State[T]
+	States map[StateName]*State[T]
 }
 
 func NewStateDetector[T comparable]() *StateDetector[T] {
 	return &StateDetector[T]{
-		States: make(map[string]*State[T]),
+		States: make(map[StateName]*State[T]),
 	}
 }
 
-func (sd *StateDetector[T]) NewState(name string, usecase Executor[T], stateType StateType) *State[T] {
+func (sd *StateDetector[T]) NewState(name StateName, usecase Executor[T], stateType StateType) *State[T] {
 	state := &State[T]{
 		Name:      name,
 		Executor:  usecase,
@@ -37,7 +39,7 @@ func (sd *StateDetector[T]) NewState(name string, usecase Executor[T], stateType
 	return state
 }
 
-func (sd *StateDetector[T]) GetStateByName(name string) (*State[T], error) {
+func (sd *StateDetector[T]) GetStateByName(name StateName) (*State[T], error) {
 	if state, ok := sd.States[name]; ok {
 		return state, nil
 	}
@@ -70,7 +72,7 @@ func (sd *StateDetector[T]) getNextState(state *State[T], response ResultStatus)
 type Executor[T comparable] func(ctx context.Context, e Event[T]) (ResultStatus, error)
 
 type State[T comparable] struct {
-	Name string
+	Name StateName
 
 	StateType StateType
 

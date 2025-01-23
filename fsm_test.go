@@ -21,13 +21,13 @@ const (
 
 // State names
 const (
-	StateNameCheckWhenPlus       = "checkWhenPlus"
-	StateNameCheckWhenMinus      = "checkWhenMinus"
-	StateNamePlus2               = "statePlus2"
-	StateNameMinus3              = "stateMinus3"
-	StateNameNeedInsertWhenPlus  = "needInsertWhenPlus"
-	StateNameNeedInsertWhenMinus = "needInsertWhenMinus"
-	StateNameDone                = "stateDone"
+	StateNameCheckWhenPlus       StateName = "checkWhenPlus"
+	StateNameCheckWhenMinus      StateName = "checkWhenMinus"
+	StateNamePlus2               StateName = "statePlus2"
+	StateNameMinus3              StateName = "stateMinus3"
+	StateNameNeedInsertWhenPlus  StateName = "needInsertWhenPlus"
+	StateNameNeedInsertWhenMinus StateName = "needInsertWhenMinus"
+	StateNameDone                StateName = "stateDone"
 )
 
 // EventTypes
@@ -67,8 +67,8 @@ func (c *cache) Get(key string) int {
 type process struct {
 	id           string
 	status       ResultStatus
-	currentState string
-	nextState    string
+	currentState StateName
+	nextState    StateName
 }
 
 func (p *process) Data() process {
