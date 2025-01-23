@@ -1,4 +1,4 @@
-module github.com/ivan-ihepurin/event-fsm
+module github.com/ivan-chepurin/event-fsm
 
 go 1.23
 
