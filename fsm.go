@@ -7,20 +7,20 @@ import (
 	"go.uber.org/zap"
 )
 
-type FSM struct {
-	StateDetector *StateDetector
+type FSM[T comparable] struct {
+	StateDetector *StateDetector[T]
 
 	l *zap.Logger
 }
 
-func NewFSM(st *StateDetector, l *zap.Logger) *FSM {
-	return &FSM{
+func NewFSM[T comparable](st *StateDetector[T], l *zap.Logger) *FSM[T] {
+	return &FSM[T]{
 		StateDetector: st,
 		l:             l,
 	}
 }
 
-func (f *FSM) ProcessEvent(ctx context.Context, e Event) (bool, error) {
+func (f *FSM[T]) ProcessEvent(ctx context.Context, e Event[T]) (bool, error) {
 	var (
 		err error
 	)
@@ -32,10 +32,10 @@ func (f *FSM) ProcessEvent(ctx context.Context, e Event) (bool, error) {
 	return f.processEvent(ctx, e)
 }
 
-func (f *FSM) processEvent(ctx context.Context, e Event) (bool, error) {
+func (f *FSM[T]) processEvent(ctx context.Context, e Event[T]) (bool, error) {
 	var (
 		status   ResultStatus
-		newState *State
+		newState *State[T]
 		err      error
 	)
 

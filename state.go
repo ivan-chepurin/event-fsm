@@ -16,28 +16,28 @@ const (
 )
 
 // StateDetector is a state detector
-type StateDetector struct {
-	States map[string]*State
+type StateDetector[T comparable] struct {
+	States map[string]*State[T]
 }
 
-func NewStateDetector() *StateDetector {
-	return &StateDetector{
-		States: make(map[string]*State),
+func NewStateDetector[T comparable]() *StateDetector[T] {
+	return &StateDetector[T]{
+		States: make(map[string]*State[T]),
 	}
 }
 
-func (sd *StateDetector) NewState(name string, usecase Executor, stateType StateType) *State {
-	state := &State{
+func (sd *StateDetector[T]) NewState(name string, usecase Executor[T], stateType StateType) *State[T] {
+	state := &State[T]{
 		Name:      name,
 		Executor:  usecase,
-		Next:      make(map[ResultStatus]*State),
+		Next:      make(map[ResultStatus]*State[T]),
 		StateType: stateType,
 	}
 	sd.States[name] = state
 	return state
 }
 
-func (sd *StateDetector) GetStateByName(name string) (*State, error) {
+func (sd *StateDetector[T]) GetStateByName(name string) (*State[T], error) {
 	if state, ok := sd.States[name]; ok {
 		return state, nil
 	}
@@ -45,7 +45,7 @@ func (sd *StateDetector) GetStateByName(name string) (*State, error) {
 	return nil, ErrStateNotFound
 }
 
-func (sd *StateDetector) getNextState(state *State, response ResultStatus) (*State, error) {
+func (sd *StateDetector[T]) getNextState(state *State[T], response ResultStatus) (*State[T], error) {
 	if nextState, ok := state.Next[response]; ok {
 
 		if sd.States[nextState.Name] != nil {
@@ -56,23 +56,34 @@ func (sd *StateDetector) getNextState(state *State, response ResultStatus) (*Sta
 	return nil, ErrStateNotFound
 }
 
-type Executor func(ctx context.Context, e Event) (ResultStatus, error)
+//	type Event [T comparable]struct {
+//		id string
+//
+//		stateName string
+//		state     *State
+//		prevState *State
+//
+//		data T
+//
+//		et EventType
+//	}
+type Executor[T comparable] func(ctx context.Context, e Event[T]) (ResultStatus, error)
 
-type State struct {
+type State[T comparable] struct {
 	Name string
 
 	StateType StateType
 
-	Next map[ResultStatus]*State
+	Next map[ResultStatus]*State[T]
 
-	Executor Executor
+	Executor Executor[T]
 }
 
-func (s *State) SetNext(nextState *State, response ResultStatus) {
+func (s *State[T]) SetNext(nextState *State[T], response ResultStatus) {
 	s.Next[response] = nextState
 }
 
-func (s *State) getNext(response ResultStatus) (*State, error) {
+func (s *State[T]) getNext(response ResultStatus) (*State[T], error) {
 	if state, ok := s.Next[response]; ok {
 		return state, nil
 	}

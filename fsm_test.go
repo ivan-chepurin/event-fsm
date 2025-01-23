@@ -71,6 +71,19 @@ type process struct {
 	nextState    string
 }
 
+func (p *process) Data() process {
+	return *p
+}
+
+func (p *process) IsNull() bool {
+	result := false
+	if p.id == "" {
+		result = true
+	}
+
+	return result
+}
+
 var currentNum = 0
 
 func getInsertNum() int {
@@ -82,14 +95,14 @@ func TestFSM_ProcessEvent(t *testing.T) {
 
 	c := cache{m: make(map[string]int)}
 
-	pMap := map[string]process{
+	pMap := map[string]*process{
 		"p1": {"p1", Ok, "", StateNameCheckWhenPlus},
 		"p2": {"p2", Ok, "", StateNameCheckWhenPlus},
 		"p3": {"p3", Ok, "", StateNameCheckWhenMinus},
 	}
 	ch := make(chan process)
 
-	check := func(ctx context.Context, e Event) (status ResultStatus, err error) {
+	check := func(ctx context.Context, e Event[process]) (status ResultStatus, err error) {
 		defer func() {
 			if nextSate, err := e.NextStateName(status); err == nil {
 				ch <- process{
@@ -131,7 +144,7 @@ func TestFSM_ProcessEvent(t *testing.T) {
 		return Next, nil
 	}
 
-	plus2 := func(ctx context.Context, e Event) (status ResultStatus, err error) {
+	plus2 := func(ctx context.Context, e Event[process]) (status ResultStatus, err error) {
 		defer func() {
 			if nextSate, err := e.NextStateName(status); err == nil {
 				ch <- process{
@@ -162,7 +175,7 @@ func TestFSM_ProcessEvent(t *testing.T) {
 		return Ok, nil
 	}
 
-	minus3 := func(ctx context.Context, e Event) (status ResultStatus, err error) {
+	minus3 := func(ctx context.Context, e Event[process]) (status ResultStatus, err error) {
 		defer func() {
 			if nextSate, err := e.NextStateName(status); err == nil {
 				ch <- process{
@@ -193,7 +206,7 @@ func TestFSM_ProcessEvent(t *testing.T) {
 		return Ok, nil
 	}
 
-	plusInsert := func(ctx context.Context, e Event) (status ResultStatus, err error) {
+	plusInsert := func(ctx context.Context, e Event[process]) (status ResultStatus, err error) {
 		defer func() {
 			if nextSate, err := e.NextStateName(status); err == nil {
 				ch <- process{
@@ -225,7 +238,7 @@ func TestFSM_ProcessEvent(t *testing.T) {
 		return Ok, nil
 	}
 
-	done := func(ctx context.Context, e Event) (status ResultStatus, err error) {
+	done := func(ctx context.Context, e Event[process]) (status ResultStatus, err error) {
 		defer func() {
 			if nextSate, err := e.NextStateName(status); err == nil {
 				ch <- process{
@@ -252,7 +265,7 @@ func TestFSM_ProcessEvent(t *testing.T) {
 		return Done, nil
 	}
 
-	sd := NewStateDetector()
+	sd := NewStateDetector[process]()
 
 	// create states
 	checkWhenPlus := sd.NewState(StateNameCheckWhenPlus, check, StateTypeTransition)
@@ -317,7 +330,7 @@ func TestFSM_ProcessEvent(t *testing.T) {
 				}
 
 				if p.status == NeedInsert {
-					pMap[p.id] = process{
+					pMap[p.id] = &process{
 						p.id,
 						p.status,
 						p.currentState,
@@ -325,7 +338,7 @@ func TestFSM_ProcessEvent(t *testing.T) {
 					}
 
 					// create event for insert
-					e := NewEvent(p.id, p.nextState, map[string]interface{}{},
+					e := NewEvent(p.id, p.nextState, pMap[p.id],
 						InsertNumEvent,
 					)
 
@@ -357,15 +370,15 @@ func TestFSM_ProcessEvent(t *testing.T) {
 		}
 	}(wg)
 
-	for id, i := range pMap {
-		e := NewEvent(id, StateNameCheckWhenPlus, map[string]interface{}{},
+	for id, p := range pMap {
+		e := NewEvent(id, StateNameCheckWhenPlus, pMap[id],
 			InsertNumEvent,
 		)
 
 		c.Set(e.ID()+cachedNum, getInsertNum())
 
 		wg.Add(1)
-		go func(id string, i process, wg *sync.WaitGroup) {
+		go func(id string, i *process, wg *sync.WaitGroup) {
 			defer wg.Done()
 
 			if ok, err := fsm.ProcessEvent(context.Background(), e); !ok {
@@ -373,7 +386,7 @@ func TestFSM_ProcessEvent(t *testing.T) {
 					t.Errorf("fsm.ProcessEvent: %v", err)
 				}
 			}
-		}(id, i, wg)
+		}(id, p, wg)
 	}
 
 	wg.Wait()

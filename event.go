@@ -5,21 +5,26 @@ import "fmt"
 // EventType is a type of event that can be processed by usecase
 type EventType string
 
+type EventData[T comparable] interface {
+	Data() T
+	IsNull() bool
+}
+
 // Event is a struct that represents an event that can be processed by usecase
-type Event struct {
+type Event[T comparable] struct {
 	id string
 
 	stateName string
-	state     *State
-	prevState *State
+	state     *State[T]
+	prevState *State[T]
 
-	data map[string]interface{}
+	data EventData[T]
 
 	et EventType
 }
 
-func NewEvent(id, stateName string, data map[string]interface{}, eventType EventType) Event {
-	return Event{
+func NewEvent[T comparable](id, stateName string, data EventData[T], eventType EventType) Event[T] {
+	return Event[T]{
 		id:        id,
 		stateName: stateName,
 		data:      data,
@@ -27,29 +32,28 @@ func NewEvent(id, stateName string, data map[string]interface{}, eventType Event
 	}
 }
 
-func (e *Event) Data(key string) (interface{}, bool) {
-	val, ok := e.data[key]
-	return val, ok
+func (e *Event[T]) Data() (T, bool) {
+	return e.data.Data(), e.data.IsNull()
 }
 
-func (e *Event) ID() string {
+func (e *Event[T]) ID() string {
 	return e.id
 }
 
-func (e *Event) Type() EventType {
+func (e *Event[T]) Type() EventType {
 	return e.et
 }
 
-func (e *Event) GetLog() string {
+func (e *Event[T]) GetLog() string {
 	log := fmt.Sprintf("id: %s, stateName: %s, type: %s", e.id, e.state.Name, e.et)
 	return log
 }
 
-func (e *Event) CurrentStateName() string {
+func (e *Event[T]) CurrentStateName() string {
 	return e.state.Name
 }
 
-func (e *Event) NextStateName(status ResultStatus) (string, error) {
+func (e *Event[T]) NextStateName(status ResultStatus) (string, error) {
 	if state, err := e.state.getNext(status); err != nil {
 		return "", err
 	} else {
