@@ -20,48 +20,51 @@ func NewFSM[T comparable](st *StateDetector[T], l *zap.Logger) *FSM[T] {
 	}
 }
 
-func (f *FSM[T]) ProcessEvent(ctx context.Context, e Event[T]) (bool, error) {
+func (f *FSM[T]) ProcessEvent(ctx context.Context, e Event[T]) (Event[T], bool, error) {
 	var (
 		err error
 	)
 
 	if e.state, err = f.StateDetector.GetStateByName(e.stateName); err != nil {
-		return false, fmt.Errorf("%w: %w, state: %s", ErrStateNotFound, err, e.stateName)
+		return e, false, fmt.Errorf("%w: %w, state: %s", ErrStateNotFound, err, e.stateName)
 	}
 
 	return f.processEvent(ctx, e)
 }
 
-func (f *FSM[T]) processEvent(ctx context.Context, e Event[T]) (bool, error) {
+func (f *FSM[T]) processEvent(ctx context.Context, e Event[T]) (Event[T], bool, error) {
 	var (
 		status   ResultStatus
 		newState *State[T]
 		err      error
+		errs     []error
 	)
 
 	for {
-		status, err = e.state.Executor(ctx, e)
-		if err != nil {
-			f.l.Error("error in usecase", zap.Error(err))
+		status, errs = e.state.Executor.Execute(ctx, e)
+		if len(errs) > 0 {
+			for _, sErr := range errs {
+				f.l.Error("error in usecase", zap.Error(sErr))
+			}
 		}
 
 		if status == Fail {
-			return false, fmt.Errorf("usecase failed: %s", e.GetLog())
+			return e, false, fmt.Errorf("usecase failed: %s", e.GetLog())
 		}
 
-		newState, err = f.StateDetector.getNextState(e.state, status)
-		if err != nil || newState == nil {
-			return true, fmt.Errorf(
+		e.prevState = e.state
+
+		e.state, err = f.StateDetector.getNextState(e.state, status)
+		if err != nil {
+
+			return e, true, fmt.Errorf(
 				"f.StateDetector.getNextState: %w, event: %s, lastStatus: %d",
 				err, e.GetLog(), status,
 			)
 		}
 
-		e.prevState = e.state
-		e.state = newState
-
 		if newState.StateType == StateTypeWaitEvent {
-			return true, nil
+			return e, true, nil
 		}
 	}
 }

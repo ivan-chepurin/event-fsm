@@ -45,7 +45,10 @@ func (e *Event[T]) Type() EventType {
 }
 
 func (e *Event[T]) GetLog() string {
-	log := fmt.Sprintf("id: %s, stateName: %s, type: %s", e.id, e.state.Name, e.et)
+	log := fmt.Sprintf(
+		"id: %s, prevStateName: %s, currentStateName: %s, type: %s",
+		e.id, e.prevState.Name, e.state.Name, e.et,
+	)
 	return log
 }
 

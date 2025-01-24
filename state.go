@@ -80,7 +80,9 @@ func ToStateName(name string) (StateName, error) {
 	return nil, ErrStateNameNotFound
 }
 
-type Executor[T comparable] func(ctx context.Context, e Event[T]) (ResultStatus, error)
+type Executor[T comparable] interface {
+	Execute(ctx context.Context, e Event[T]) (ResultStatus, []error)
+}
 
 type State[T comparable] struct {
 	Name StateName
@@ -114,14 +116,14 @@ func NewStateDetector[T comparable]() *StateDetector[T] {
 	}
 }
 
-func (sd *StateDetector[T]) NewState(name StateName, usecase Executor[T], stateType StateType) *State[T] {
+func (sd *StateDetector[T]) NewState(name StateName, execotor Executor[T], stateType StateType) *State[T] {
 	if _, ok := _stateNames[name.String()]; !ok {
 		panic(ErrStateNameNotFound)
 	}
 
 	state := &State[T]{
 		Name:      name,
-		Executor:  usecase,
+		Executor:  execotor,
 		Next:      make(map[ResultStatus]*State[T]),
 		StateType: stateType,
 	}
