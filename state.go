@@ -3,6 +3,7 @@ package event_fsm
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 )
 
 type ResultStatus int
@@ -39,6 +40,18 @@ func NewStateName(name string) StateName {
 	panic(ErrStateNameAlreadyExists)
 }
 
+func GetStateName(name string) (StateName, error) {
+	if sn, ok := _stateNames[name]; ok {
+		return &sn, nil
+	}
+
+	if name == "" {
+		return nil, ErrStateNameEmpty
+	}
+
+	return nil, ErrStateNameNotFound
+}
+
 func (sn stateName) String() string {
 	return string(sn)
 }
@@ -57,7 +70,7 @@ func (sn stateName) MarshalJSON() ([]byte, error) {
 	return nil, ErrStateNameNotFound
 }
 
-// UnmarshalJSON unmarshal data to string, then check if it is a valid state name or not
+// UnmarshalJSON unmarshal eventData to string, then check if it is a valid state name or not
 func (sn *stateName) UnmarshalJSON(data []byte) error {
 	var name string
 	if err := json.Unmarshal(data, &name); err != nil {
@@ -72,16 +85,8 @@ func (sn *stateName) UnmarshalJSON(data []byte) error {
 	return ErrStateNameNotFound
 }
 
-func ToStateName(name string) (StateName, error) {
-	if sn, ok := _stateNames[name]; ok {
-		return &sn, nil
-	}
-
-	return nil, ErrStateNameNotFound
-}
-
 type Executor[T comparable] interface {
-	Execute(ctx context.Context, e Event[T]) (ResultStatus, []error)
+	Execute(ctx context.Context, e T) (ResultStatus, error)
 }
 
 type State[T comparable] struct {
@@ -107,45 +112,60 @@ func (s *State[T]) getNext(response ResultStatus) (*State[T], error) {
 
 // StateDetector is a state detector
 type StateDetector[T comparable] struct {
-	States map[StateName]*State[T]
+	states    map[string]*State[T]
+	mainState *State[T]
 }
 
 func NewStateDetector[T comparable]() *StateDetector[T] {
 	return &StateDetector[T]{
-		States: make(map[StateName]*State[T]),
+		states: make(map[string]*State[T]),
 	}
 }
 
-func (sd *StateDetector[T]) NewState(name StateName, execotor Executor[T], stateType StateType) *State[T] {
+func (sd *StateDetector[T]) NewState(name StateName, executor Executor[T], stateType StateType) *State[T] {
 	if _, ok := _stateNames[name.String()]; !ok {
 		panic(ErrStateNameNotFound)
 	}
 
 	state := &State[T]{
 		Name:      name,
-		Executor:  execotor,
+		Executor:  executor,
 		Next:      make(map[ResultStatus]*State[T]),
 		StateType: stateType,
 	}
-	sd.States[name] = state
+	sd.states[name.String()] = state
+
+	fmt.Printf("State %s created\n", name.String())
+
 	return state
 }
 
+func (sd *StateDetector[T]) SetMainState(state *State[T]) {
+	sd.mainState = state
+}
+
+func (sd *StateDetector[T]) getMainState() (*State[T], error) {
+	if sd.mainState == nil {
+		return nil, ErrMainStateNotFound
+	}
+	return sd.mainState, nil
+}
+
 func (sd *StateDetector[T]) GetStateByName(name StateName) (*State[T], error) {
-	if state, ok := sd.States[name]; ok {
+	if state, ok := sd.states[name.String()]; ok {
 		return state, nil
 	}
 
 	return nil, ErrStateNotFound
 }
 
-func (sd *StateDetector[T]) getNextState(state *State[T], response ResultStatus) (*State[T], error) {
+func (sd *StateDetector[T]) getNextState(state *State[T], response ResultStatus) (*State[T], bool) {
 	if nextState, ok := state.Next[response]; ok {
 
-		if sd.States[nextState.Name] != nil {
-			return nextState, nil
+		if sd.states[nextState.Name.String()] != nil {
+			return nextState, true
 		}
 	}
 
-	return nil, ErrStateNotFound
+	return nil, false
 }

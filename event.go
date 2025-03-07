@@ -2,33 +2,27 @@ package event_fsm
 
 import "fmt"
 
-// EventType is a type of event that can be processed by usecase
-type EventType string
-
 type EventData[T comparable] interface {
 	Data() T
 	IsNull() bool
+	StateName() (StateName, error)
+	SetStateName(StateName)
 }
 
 // Event is a struct that represents an event that can be processed by usecase
 type Event[T comparable] struct {
 	id string
 
-	stateName StateName
 	state     *State[T]
 	prevState *State[T]
 
 	data EventData[T]
-
-	et EventType
 }
 
-func NewEvent[T comparable](id string, stateName StateName, data EventData[T], eventType EventType) Event[T] {
+func NewEvent[T comparable](id string, data EventData[T]) Event[T] {
 	return Event[T]{
-		id:        id,
-		stateName: stateName,
-		data:      data,
-		et:        eventType,
+		id:   id,
+		data: data,
 	}
 }
 
@@ -40,14 +34,12 @@ func (e *Event[T]) ID() string {
 	return e.id
 }
 
-func (e *Event[T]) Type() EventType {
-	return e.et
-}
-
 func (e *Event[T]) GetLog() string {
 	log := fmt.Sprintf(
-		"id: %s, prevStateName: %s, currentStateName: %s, type: %s",
-		e.id, e.prevState.Name, e.state.Name, e.et,
+		"id: %s, prevStateName: %s, currentStateName: %s",
+		e.id,
+		e.prevState.Name,
+		e.state.Name,
 	)
 	return log
 }
@@ -57,10 +49,10 @@ func (e *Event[T]) CurrentStateName() StateName {
 }
 
 func (e *Event[T]) NextStateName(status ResultStatus) (StateName, error) {
-	if state, err := e.state.getNext(status); err != nil {
-		return nil, err
-	} else {
+	if state, err := e.state.getNext(status); err == nil {
 		return state.Name, nil
+	} else {
+		return nil, err
 	}
 }
 

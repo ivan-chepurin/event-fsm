@@ -2,69 +2,86 @@ package event_fsm
 
 import (
 	"context"
+	"errors"
 	"fmt"
 
 	"go.uber.org/zap"
 )
 
 type FSM[T comparable] struct {
-	StateDetector *StateDetector[T]
+	stateDetector *StateDetector[T]
 
 	l *zap.Logger
 }
 
-func NewFSM[T comparable](st *StateDetector[T], l *zap.Logger) *FSM[T] {
+func NewFSM[T comparable](sd *StateDetector[T], l *zap.Logger) *FSM[T] {
 	return &FSM[T]{
-		StateDetector: st,
+		stateDetector: sd,
 		l:             l,
 	}
 }
 
-func (f *FSM[T]) ProcessEvent(ctx context.Context, e Event[T]) (Event[T], bool, error) {
+func (f *FSM[T]) ProcessEvent(ctx context.Context, e Event[T]) (Event[T], error) {
 	var (
 		err error
 	)
 
-	if e.state, err = f.StateDetector.GetStateByName(e.stateName); err != nil {
-		return e, false, fmt.Errorf("%w: %w, state: %s", ErrStateNotFound, err, e.stateName)
+	sn, err := e.data.StateName()
+	if err != nil {
+		if errors.Is(err, ErrStateNotFound) {
+			return e, fmt.Errorf("e.eventData.StateName: %v: %w", ErrStateNotFound, err)
+		}
+
+		ms, err := f.stateDetector.getMainState()
+		if err != nil {
+			return e, fmt.Errorf("f.stateDetector.getMainState: %v: %w", ErrStateNotFound, err)
+		}
+
+		fmt.Println("Main state:", ms.Name)
+		sn = ms.Name
+	}
+
+	if e.state, err = f.stateDetector.GetStateByName(sn); err != nil {
+		return e, fmt.Errorf("%v: %w, state: %s", ErrStateNotFound, err, sn)
 	}
 
 	return f.processEvent(ctx, e)
 }
 
-func (f *FSM[T]) processEvent(ctx context.Context, e Event[T]) (Event[T], bool, error) {
+func (f *FSM[T]) processEvent(ctx context.Context, e Event[T]) (Event[T], error) {
 	var (
-		status   ResultStatus
-		newState *State[T]
-		err      error
-		errs     []error
+		status ResultStatus
+		pErr   error
+		ok     bool
 	)
 
 	for {
-		status, errs = e.state.Executor.Execute(ctx, e)
-		if len(errs) > 0 {
-			for _, sErr := range errs {
-				f.l.Error("error in usecase", zap.Error(sErr))
-			}
+		if e.data.IsNull() {
+			return e, fmt.Errorf("eventData is null")
+		}
+
+		status, pErr = e.state.Executor.Execute(ctx, e.data.Data())
+		if pErr != nil {
+			f.l.Error("error in usecase", zap.Error(pErr))
 		}
 
 		if status == Fail {
-			return e, false, fmt.Errorf("usecase failed: %s", e.GetLog())
+			return e, fmt.Errorf("usecase failed: %s", e.GetLog())
 		}
 
 		e.prevState = e.state
 
-		e.state, err = f.StateDetector.getNextState(e.state, status)
-		if err != nil {
+		fmt.Printf("State: %s, status: %d \n", e.state.Name, status)
 
-			return e, true, fmt.Errorf(
-				"f.StateDetector.getNextState: %w, event: %s, lastStatus: %d",
-				err, e.GetLog(), status,
-			)
+		e.state, ok = f.stateDetector.getNextState(e.state, status)
+		if !ok {
+			return e, fmt.Errorf("no next state for %s: %w", e.prevState.Name, ErrNoNextState)
 		}
 
-		if newState.StateType == StateTypeWaitEvent {
-			return e, true, nil
+		e.data.SetStateName(e.state.Name)
+
+		if e.state.StateType == StateTypeWaitEvent {
+			return e, nil
 		}
 	}
 }
