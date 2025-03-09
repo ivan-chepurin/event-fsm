@@ -19,70 +19,57 @@ const (
 	StateTypeWaitEvent
 )
 
-type StateName interface {
-	json.Marshaler
-	json.Unmarshaler
-	String() string
-}
+type StateName string
 
-type stateName string
-
-var _stateNames = map[string]stateName{}
+var _stateNames = map[string]StateName{}
 
 // State result statuses
 func NewStateName(name string) StateName {
-	if sn, ok := _stateNames[name]; !ok {
-		sn = stateName(name)
-		_stateNames[name] = sn
-		return &sn
-	}
-
-	panic(ErrStateNameAlreadyExists)
-}
-
-func GetStateName(name string) (StateName, error) {
 	if sn, ok := _stateNames[name]; ok {
-		return &sn, nil
+		return sn
 	}
 
-	if name == "" {
-		return nil, ErrStateNameEmpty
-	}
+	sn := StateName(name)
+	_stateNames[name] = sn
 
-	return nil, ErrStateNameNotFound
+	return sn
 }
 
-func (sn stateName) String() string {
-	return string(sn)
+func GetStateName(name string) StateName {
+	if sn, ok := _stateNames[name]; ok {
+		return sn
+	}
+
+	return NewStateName("")
+}
+
+func (sn *StateName) String() string {
+	return string(*sn)
 }
 
 // MarshalJSON check if state name is valid or not before marshalling with Alias
-func (sn stateName) MarshalJSON() ([]byte, error) {
-	if _, ok := _stateNames[string(sn)]; ok {
-		type Alias stateName
-		return json.Marshal(&struct {
-			*Alias
-		}{
-			Alias: (*Alias)(&sn),
-		})
+func (sn *StateName) MarshalJSON() ([]byte, error) {
+	if _, ok := _stateNames[sn.String()]; !ok {
+		return nil, fmt.Errorf("state name %s not found", sn.String())
 	}
 
-	return nil, ErrStateNameNotFound
+	return json.Marshal(sn.String())
 }
 
 // UnmarshalJSON unmarshal eventData to string, then check if it is a valid state name or not
-func (sn *stateName) UnmarshalJSON(data []byte) error {
+func (sn *StateName) UnmarshalJSON(data []byte) error {
 	var name string
 	if err := json.Unmarshal(data, &name); err != nil {
 		return err
 	}
 
-	if msn, ok := _stateNames[name]; ok {
-		*sn = msn
-		return nil
+	if _, ok := _stateNames[name]; !ok {
+		return fmt.Errorf("state name %s not found", name)
 	}
 
-	return ErrStateNameNotFound
+	*sn = StateName(name)
+
+	return nil
 }
 
 type Executor[T comparable] interface {

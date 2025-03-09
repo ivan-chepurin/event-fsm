@@ -2,7 +2,6 @@ package event_fsm
 
 import (
 	"context"
-	"errors"
 	"fmt"
 
 	"go.uber.org/zap"
@@ -26,11 +25,8 @@ func (f *FSM[T]) ProcessEvent(ctx context.Context, e Event[T]) (Event[T], error)
 		err error
 	)
 
-	sn, err := e.data.StateName()
-	if err != nil {
-		if errors.Is(err, ErrStateNotFound) {
-			return e, fmt.Errorf("e.eventData.StateName: %v: %w", ErrStateNotFound, err)
-		}
+	sn := e.data.StateName()
+	if sn.String() == "" {
 
 		ms, err := f.stateDetector.getMainState()
 		if err != nil {

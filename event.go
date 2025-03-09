@@ -5,7 +5,7 @@ import "fmt"
 type EventData[T comparable] interface {
 	Data() T
 	IsNull() bool
-	StateName() (StateName, error)
+	StateName() StateName
 	SetStateName(StateName)
 }
 
@@ -52,7 +52,7 @@ func (e *Event[T]) NextStateName(status ResultStatus) (StateName, error) {
 	if state, err := e.state.getNext(status); err == nil {
 		return state.Name, nil
 	} else {
-		return nil, err
+		return "", err
 	}
 }
 

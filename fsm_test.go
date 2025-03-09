@@ -68,7 +68,7 @@ func (e *eventData) SetStateName(state StateName) {
 	e.CurrentState = state.String()
 }
 
-func (e *eventData) StateName() (StateName, error) {
+func (e *eventData) StateName() StateName {
 	return GetStateName(e.CurrentState)
 }
 
@@ -227,4 +227,25 @@ func (s *statePrintResult) Execute(ctx context.Context, data *eventData) (Result
 	)
 
 	return Ok, nil
+}
+
+func TestStateName(t *testing.T) {
+	sn := NewStateName("test")
+
+	msn, err := sn.MarshalJSON()
+	if err != nil {
+		t.Fatalf("failed to marshal state name: %v", err)
+	}
+
+	t.Logf("state name: %s", string(msn))
+
+	var nsn StateName
+	err = nsn.UnmarshalJSON(msn)
+	if err != nil {
+		t.Fatalf("failed to unmarshal state name: %v", err)
+	}
+
+	if sn.String() != nsn.String() {
+		t.Fatalf("expected %s, got %s", sn.String(), nsn.String())
+	}
 }
