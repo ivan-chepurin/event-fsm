@@ -122,8 +122,6 @@ func (sd *StateDetector[T]) NewState(name StateName, executor Executor[T], state
 	}
 	sd.states[name.String()] = state
 
-	fmt.Printf("State %s created\n", name.String())
-
 	return state
 }
 

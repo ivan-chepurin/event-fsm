@@ -33,7 +33,6 @@ func (f *FSM[T]) ProcessEvent(ctx context.Context, e Event[T]) (Event[T], error)
 			return e, fmt.Errorf("f.stateDetector.getMainState: %v: %w", ErrStateNotFound, err)
 		}
 
-		fmt.Println("Main state:", ms.Name)
 		sn = ms.Name
 	}
 
@@ -66,8 +65,6 @@ func (f *FSM[T]) processEvent(ctx context.Context, e Event[T]) (Event[T], error)
 		}
 
 		e.prevState = e.state
-
-		fmt.Printf("State: %s, status: %d \n", e.state.Name, status)
 
 		e.state, ok = f.stateDetector.getNextState(e.state, status)
 		if !ok {
