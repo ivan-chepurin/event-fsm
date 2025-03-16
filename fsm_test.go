@@ -2,11 +2,13 @@ package event_fsm
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"strconv"
 	"sync"
 	"testing"
+	"time"
 
 	"go.uber.org/zap"
 )
@@ -42,10 +44,9 @@ func (c *cache) Set(key string, d eventData) {
 }
 
 type eventData struct {
-	InitNumber   int
-	CurrentState string
-	Number       int
-	ManualAdd    int
+	InitNumber int
+	Number     int
+	ManualAdd  int
 }
 
 func newEventData(initData int) eventData {
@@ -64,20 +65,26 @@ func (e *eventData) IsNull() bool {
 	return e == nil
 }
 
-func (e *eventData) SetStateName(state StateName) {
-	e.CurrentState = state.String()
+func (e *eventData) ID() string {
+	return strconv.Itoa(e.InitNumber)
 }
 
-func (e *eventData) StateName() StateName {
-	return GetStateName(e.CurrentState)
+func (e *eventData) MetaInfo() json.RawMessage {
+	m := map[string]string{
+		"InitNumber": strconv.Itoa(e.InitNumber),
+		"ManualAdd":  strconv.Itoa(e.ManualAdd),
+	}
+
+	mi, _ := json.Marshal(m)
+
+	return mi
 }
 
 // ResultStatus is a type for the result status of a usecase
-const (
-	Ok ResultStatus = iota + 1
-	NotEnough
-	TooMuch
-	WrongNumber
+var (
+	NotEnough   = NewResultStatus("not_enough")
+	TooMuch     = NewResultStatus("too_much")
+	WrongNumber = NewResultStatus("wrong_number")
 )
 
 // State names
@@ -108,46 +115,69 @@ func TestProcess(t *testing.T) {
 	remove2 := sd.NewState(StateRemove2, &stateRemove2{cache: cacheInstance}, StateTypeTransition)
 	manualAdd := sd.NewState(StateManualAdd, &stateManualAdd{cache: cacheInstance}, StateTypeWaitEvent)
 	lastCheck := sd.NewState(StateLastCheck, &stateLastCheck{}, StateTypeTransition)
-	printResult := sd.NewState(StatePrintResult, &statePrintResult{}, StateTypeTransition)
+	printResult := sd.NewState(StatePrintResult, &statePrintResult{t}, StateTypeTransition)
 
 	firstCheck.SetNext(add3, NotEnough)
 	firstCheck.SetNext(remove2, TooMuch)
-	firstCheck.SetNext(manualAdd, Ok)
-	add3.SetNext(manualAdd, Ok)
+	firstCheck.SetNext(manualAdd, ResultStatusOk)
+	add3.SetNext(manualAdd, ResultStatusOk)
 
-	add3.SetNext(firstCheck, Ok)
-	remove2.SetNext(firstCheck, Ok)
+	add3.SetNext(firstCheck, ResultStatusOk)
+	remove2.SetNext(firstCheck, ResultStatusOk)
 
-	manualAdd.SetNext(lastCheck, Ok)
+	manualAdd.SetNext(lastCheck, ResultStatusOk)
 
 	lastCheck.SetNext(firstCheck, WrongNumber)
-	lastCheck.SetNext(printResult, Ok)
+	lastCheck.SetNext(printResult, ResultStatusOk)
 
 	sd.SetMainState(firstCheck)
+	zap.NewNop().Error("State detector initialized")
+	cfg := &Config[*eventData]{
+		Logger:        zap.NewNop(),
+		StateDetector: sd,
+		DBConf:        "host=localhost port=5432 user=user password=qwerty dbname=fsm_test_db sslmode=disable",
+		RedisConf: &Redis{
+			URL:      "localhost:6379",
+			Password: "qwerty",
+		},
+		AppLabel:              "fsm_test",
+		MaxOpenConnections:    5,
+		MaxIdleConnections:    5,
+		ConnectionMaxLifetime: 5 * time.Second,
+	}
 
-	fsm := NewFSM[*eventData](sd, zap.NewNop())
+	fsm, err := NewFSM[*eventData](cfg)
+	if err != nil {
+		t.Fatal("Error creating FSM:", err)
+		return
+	}
 
 	wg := sync.WaitGroup{}
-	for i, ed := range edSlice {
+	for _, ed := range edSlice {
 		wg.Add(1)
 		go func(ed eventData) {
 			defer wg.Done()
 
 			cacheInstance.Set("test", ed)
 
-			_, err := fsm.ProcessEvent(context.Background(), NewEvent(strconv.Itoa(i), &ed))
+			_, err := fsm.ProcessEvent(context.Background(), NewTarget(&ed))
 			if err != nil {
-				t.Fatal("Error processing event:", err)
+				if errors.Is(err, ErrNoNextState) {
+					t.Log("For test need to clean data base and redis")
+
+					return
+				}
+				t.Fatal("Error processing event:", err.Error())
 				return
 
 			}
 
 			ed.ManualAdd = -20
 
-			_, err = fsm.ProcessEvent(context.Background(), NewEvent(strconv.Itoa(i), &ed))
+			_, err = fsm.ProcessEvent(context.Background(), NewTarget(&ed))
 			if err != nil {
 				if !errors.Is(err, ErrNoNextState) {
-					t.Fatal("Error processing event:", err)
+					t.Fatal("Error processing event:", err.Error())
 					return
 				}
 			}
@@ -169,7 +199,7 @@ func (s *stateFirstCheck) Execute(ctx context.Context, data *eventData) (ResultS
 		return TooMuch, nil
 	}
 
-	return Ok, nil
+	return ResultStatusOk, nil
 }
 
 type stateAdd3 struct {
@@ -181,7 +211,7 @@ func (s *stateAdd3) Execute(ctx context.Context, data *eventData) (ResultStatus,
 
 	s.cache.Set("test", *data)
 
-	return Ok, nil
+	return ResultStatusOk, nil
 }
 
 type stateRemove2 struct {
@@ -193,7 +223,7 @@ func (s *stateRemove2) Execute(ctx context.Context, data *eventData) (ResultStat
 
 	s.cache.Set("test", *data)
 
-	return Ok, nil
+	return ResultStatusOk, nil
 }
 
 type stateManualAdd struct {
@@ -205,28 +235,30 @@ func (s *stateManualAdd) Execute(ctx context.Context, data *eventData) (ResultSt
 
 	s.cache.Set("test", *data)
 
-	return Ok, nil
+	return ResultStatusOk, nil
 }
 
 type stateLastCheck struct{}
 
 func (s *stateLastCheck) Execute(ctx context.Context, data *eventData) (ResultStatus, error) {
 	if data.Number == -10 {
-		return Ok, nil
+		return ResultStatusOk, nil
 	}
 
 	return WrongNumber, nil
 }
 
-type statePrintResult struct{}
+type statePrintResult struct {
+	log *testing.T
+}
 
 func (s *statePrintResult) Execute(ctx context.Context, data *eventData) (ResultStatus, error) {
-	fmt.Printf("init number: %d, current state: %s, number: %d, manual add: %d\n",
-		data.InitNumber, data.CurrentState,
+	s.log.Log(fmt.Sprintf("init number: %d, number: %d, manual add: %d\n",
+		data.InitNumber,
 		data.Number, data.ManualAdd,
-	)
+	))
 
-	return Ok, nil
+	return ResultStatusOk, nil
 }
 
 func TestStateName(t *testing.T) {

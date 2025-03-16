@@ -2,14 +2,84 @@ package event_fsm
 
 import (
 	"context"
+	"database/sql/driver"
 	"encoding/json"
 	"fmt"
 )
 
-type ResultStatus int
+type ResultStatus string
 
-const (
-	Fail ResultStatus = -1
+var _resultStatuses = map[string]ResultStatus{}
+
+// NewResultStatus creates a new ResultStatus instance
+func NewResultStatus(status string) ResultStatus {
+	if rs, ok := _resultStatuses[status]; ok {
+		return rs
+	}
+
+	rs := ResultStatus(status)
+	_resultStatuses[status] = rs
+
+	return rs
+}
+
+func (r *ResultStatus) String() string {
+	return string(*r)
+}
+
+func (r *ResultStatus) MarshalJSON() ([]byte, error) {
+	if _, ok := _resultStatuses[r.String()]; !ok {
+		return nil, fmt.Errorf("result status %s not found", r.String())
+	}
+
+	return json.Marshal(r.String())
+}
+
+func (r *ResultStatus) UnmarshalJSON(data []byte) error {
+	var status string
+	if err := json.Unmarshal(data, &status); err != nil {
+		return err
+	}
+
+	if status == "" {
+		return fmt.Errorf("result status is empty")
+	}
+
+	if _, ok := _resultStatuses[status]; !ok {
+		return fmt.Errorf("result status %s not found", status)
+	}
+
+	*r = _resultStatuses[status]
+
+	return nil
+}
+
+func (r *ResultStatus) Scan(value interface{}) error {
+	if str, ok := value.(string); ok {
+		*r, ok = _resultStatuses[str]
+		if !ok {
+			return fmt.Errorf("result status %s not found", str)
+		}
+
+		return nil
+	}
+
+	return fmt.Errorf("cannot convert %v to string", value)
+}
+
+func (r *ResultStatus) Value() (driver.Value, error) {
+	if r.String() == "" {
+		return nil, fmt.Errorf("result status is empty")
+	}
+
+	return r.String(), nil
+}
+
+var (
+	ResultStatusEmpty         = NewResultStatus("")
+	ResultStatusFail          = NewResultStatus("fail")
+	ResultStatusOk            = NewResultStatus("ok")
+	resultStatusWaitNextEvent = NewResultStatus("wait_next_event")
 )
 
 type StateType int
@@ -33,14 +103,6 @@ func NewStateName(name string) StateName {
 	_stateNames[name] = sn
 
 	return sn
-}
-
-func GetStateName(name string) StateName {
-	if sn, ok := _stateNames[name]; ok {
-		return sn
-	}
-
-	return NewStateName("")
 }
 
 func (sn *StateName) String() string {
@@ -72,6 +134,23 @@ func (sn *StateName) UnmarshalJSON(data []byte) error {
 	return nil
 }
 
+func (sn *StateName) Scan(value interface{}) error {
+	if str, ok := value.(string); ok {
+		*sn = StateName(str)
+		return nil
+	}
+
+	return fmt.Errorf("cannot convert %v to string", value)
+}
+
+func (sn *StateName) Value() (driver.Value, error) {
+	if sn.String() == "" {
+		return nil, fmt.Errorf("state name is empty")
+	}
+
+	return sn.String(), nil
+}
+
 type Executor[T comparable] interface {
 	Execute(ctx context.Context, e T) (ResultStatus, error)
 }
@@ -81,76 +160,18 @@ type State[T comparable] struct {
 
 	StateType StateType
 
-	Next map[ResultStatus]*State[T]
+	Next map[string]*State[T]
 
 	Executor Executor[T]
 }
 
 func (s *State[T]) SetNext(nextState *State[T], response ResultStatus) {
-	s.Next[response] = nextState
+	s.Next[response.String()] = nextState
 }
 
 func (s *State[T]) getNext(response ResultStatus) (*State[T], error) {
-	if state, ok := s.Next[response]; ok {
+	if state, ok := s.Next[response.String()]; ok {
 		return state, nil
 	}
 	return nil, ErrStateNotFound
-}
-
-// StateDetector is a state detector
-type StateDetector[T comparable] struct {
-	states    map[string]*State[T]
-	mainState *State[T]
-}
-
-func NewStateDetector[T comparable]() *StateDetector[T] {
-	return &StateDetector[T]{
-		states: make(map[string]*State[T]),
-	}
-}
-
-func (sd *StateDetector[T]) NewState(name StateName, executor Executor[T], stateType StateType) *State[T] {
-	if _, ok := _stateNames[name.String()]; !ok {
-		panic(ErrStateNameNotFound)
-	}
-
-	state := &State[T]{
-		Name:      name,
-		Executor:  executor,
-		Next:      make(map[ResultStatus]*State[T]),
-		StateType: stateType,
-	}
-	sd.states[name.String()] = state
-
-	return state
-}
-
-func (sd *StateDetector[T]) SetMainState(state *State[T]) {
-	sd.mainState = state
-}
-
-func (sd *StateDetector[T]) getMainState() (*State[T], error) {
-	if sd.mainState == nil {
-		return nil, ErrMainStateNotFound
-	}
-	return sd.mainState, nil
-}
-
-func (sd *StateDetector[T]) GetStateByName(name StateName) (*State[T], error) {
-	if state, ok := sd.states[name.String()]; ok {
-		return state, nil
-	}
-
-	return nil, ErrStateNotFound
-}
-
-func (sd *StateDetector[T]) getNextState(state *State[T], response ResultStatus) (*State[T], bool) {
-	if nextState, ok := state.Next[response]; ok {
-
-		if sd.states[nextState.Name.String()] != nil {
-			return nextState, true
-		}
-	}
-
-	return nil, false
 }

@@ -2,79 +2,129 @@ package event_fsm
 
 import (
 	"context"
+	"errors"
 	"fmt"
 
+	"github.com/google/uuid"
 	"go.uber.org/zap"
 )
 
+const (
+	searchPath = "fsm"
+)
+
 type FSM[T comparable] struct {
-	stateDetector *StateDetector[T]
-
 	l *zap.Logger
+
+	store *storage
+
+	stateDetector *StateDetector[T]
 }
 
-func NewFSM[T comparable](sd *StateDetector[T], l *zap.Logger) *FSM[T] {
-	return &FSM[T]{
-		stateDetector: sd,
-		l:             l,
+func NewFSM[T comparable](cfg *Config[T]) (*FSM[T], error) {
+	if err := cfg.check(); err != nil {
+		return nil, fmt.Errorf("cfg.check() failed: %w", err)
 	}
+
+	dbConn, err := initDB(cfg)
+	if err != nil {
+		return nil, fmt.Errorf("initDB failed: %w", err)
+	}
+
+	db := newDBStore(dbConn)
+
+	rdb, err := initRedis(cfg)
+	if err != nil {
+		return nil, fmt.Errorf("initRedis failed: %w", err)
+	}
+
+	return &FSM[T]{
+		stateDetector: cfg.StateDetector,
+		l:             cfg.Logger,
+
+		store: newStorage(cfg.Logger, cfg.AppLabel, db, rdb),
+	}, nil
 }
 
-func (f *FSM[T]) ProcessEvent(ctx context.Context, e Event[T]) (Event[T], error) {
+func (f *FSM[T]) ProcessEvent(ctx context.Context, t Target[T]) (Target[T], error) {
 	var (
 		err error
 	)
 
-	sn := e.data.StateName()
-	if sn.String() == "" {
+	// check if the target is nil
+	if t.data.IsNull() {
+		return t, fmt.Errorf("target is nil")
+	}
 
-		ms, err := f.stateDetector.getMainState()
-		if err != nil {
-			return e, fmt.Errorf("f.stateDetector.getMainState: %v: %w", ErrStateNotFound, err)
+	// determine current state
+	var currentStateName StateName
+	lastLog, err := f.store.getLastLog(ctx, t.id)
+	if err != nil {
+		if !errors.Is(err, ErrLastLogNotFound) {
+			return t, fmt.Errorf("f.store.getLastLog: %w", err)
 		}
 
-		sn = ms.Name
+		currentStateName = f.stateDetector.mainState.Name
+	} else {
+		currentStateName = lastLog.CurrentStateName
 	}
 
-	if e.state, err = f.stateDetector.GetStateByName(sn); err != nil {
-		return e, fmt.Errorf("%v: %w, state: %s", ErrStateNotFound, err, sn)
+	if t.state, err = f.stateDetector.stateByName(currentStateName); err != nil {
+		return t, fmt.Errorf("%v: %w, state: %s", ErrStateNotFound, err, currentStateName)
 	}
 
-	return f.processEvent(ctx, e)
+	t.eventID = uuid.NewString()
+	t.eventID, err = f.store.saveEvent(ctx, t.event())
+	if err != nil {
+		return t, fmt.Errorf("f.store.saveEvent: %w", err)
+	}
+
+	return f.processEvent(ctx, t)
 }
 
-func (f *FSM[T]) processEvent(ctx context.Context, e Event[T]) (Event[T], error) {
+func (f *FSM[T]) processEvent(ctx context.Context, t Target[T]) (Target[T], error) {
 	var (
-		status ResultStatus
-		pErr   error
-		ok     bool
+		ok bool
 	)
 
 	for {
-		if e.data.IsNull() {
-			return e, fmt.Errorf("eventData is null")
+		id, err := f.store.saveLog(ctx, t.log())
+		if err != nil {
+			return t, fmt.Errorf("f.store.createLog: %w", err)
 		}
 
-		status, pErr = e.state.Executor.Execute(ctx, e.data.Data())
-		if pErr != nil {
-			f.l.Error("error in usecase", zap.Error(pErr))
+		t.stateResult, err = t.state.Executor.Execute(ctx, t.data.Data())
+		if err != nil {
+			f.l.Error("error executing state", zap.Error(err), zap.String("state", t.state.Name.String()))
 		}
 
-		if status == Fail {
-			return e, fmt.Errorf("usecase failed: %s", e.GetLog())
+		log := t.log()
+		log.ID = id
+		if err = f.store.updateLog(ctx, log); err != nil {
+			return t, fmt.Errorf("f.store.updateLog: %w", err)
 		}
 
-		e.prevState = e.state
+		if err = f.store.updateEvent(ctx, t.event()); err != nil {
+			return t, fmt.Errorf("f.store.updateEvent: %w", err)
+		}
 
-		e.state, ok = f.stateDetector.getNextState(e.state, status)
+		if t.stateResult == ResultStatusFail {
+			return t, fmt.Errorf("state execution failed: %s", t.state.Name)
+		}
+
+		t.state, ok = f.stateDetector.getNextState(t.state, t.stateResult)
 		if !ok {
-			return e, fmt.Errorf("no next state for %s: %w", e.prevState.Name, ErrNoNextState)
+			return t, fmt.Errorf("no next state for %s: %w", log.CurrentStateName, ErrNoNextState)
 		}
 
-		e.data.SetStateName(e.state.Name)
+		if t.state.StateType == StateTypeWaitEvent {
+			// wait for the next event
+			t.stateResult = resultStatusWaitNextEvent
+			if _, err = f.store.createFullLog(ctx, t.log()); err != nil {
+				return t, fmt.Errorf("f.store.createLog: %w", err)
+			}
 
-		if e.state.StateType == StateTypeWaitEvent {
-			return e, nil
+			return t, nil
 		}
 	}
 }

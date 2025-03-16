@@ -7,4 +7,5 @@ var (
 	ErrStateNameNotFound = errors.New("state name not found")
 	ErrMainStateNotFound = errors.New("main state not found")
 	ErrNoNextState       = errors.New("no next state found")
+	ErrLastLogNotFound   = errors.New("last log not found")
 )
