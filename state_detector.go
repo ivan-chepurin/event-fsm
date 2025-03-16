@@ -20,7 +20,7 @@ func (sd *StateDetector[T]) NewState(name StateName, executor Executor[T], state
 	state := &State[T]{
 		Name:      name,
 		Executor:  executor,
-		Next:      make(map[ResultStatus]*State[T]),
+		Next:      make(map[string]*State[T]),
 		StateType: stateType,
 	}
 	sd.states[name.String()] = state
@@ -48,9 +48,9 @@ func (sd *StateDetector[T]) stateByName(name StateName) (*State[T], error) {
 }
 
 func (sd *StateDetector[T]) getNextState(state *State[T], response ResultStatus) (*State[T], bool) {
-	if nextState, ok := state.Next[response]; ok {
+	if nextState, ok := state.Next[response.String()]; ok {
 
-		if sd.states[nextState.Name.String()] != nil {
+		if _, ok = sd.states[nextState.Name.String()]; ok {
 			return nextState, true
 		}
 	}

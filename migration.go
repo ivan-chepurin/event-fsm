@@ -136,7 +136,7 @@ var migrations = []migrationData{
 			);
 			
 			CREATE INDEX IF NOT EXISTS fsm_target_events_idx ON fsm_target_events (id);
-			СREATE INDEX IF NOT EXISTS fsm_target_events_target_id_idx ON fsm_target_events (target_id);
+			CREATE INDEX IF NOT EXISTS fsm_target_events_target_id_idx ON fsm_target_events (target_id);
 			
 			CREATE TABLE IF NOT EXISTS fsm_target_logs (
 				id UUID PRIMARY KEY DEFAULT public.uuid_generate_v4(),

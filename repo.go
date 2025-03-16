@@ -45,12 +45,12 @@ func (s *stateRepo) getLastLogByTargetID(ctx context.Context, targetID string) (
 			updated_at 
 		FROM fsm_target_logs 
 		WHERE target_id = $1 
-		ORDER BY created_at DESC, id DESC  -- Добавили id для детерминированности
-		LIMIT 1
+		ORDER BY created_at DESC LIMIT 1
 	`
 
 	var log logDto
-	err := s.store.db.QueryRowContext(ctx, query, targetID).Scan(&log) // Используем QueryRowContext и StructScan
+	row := s.store.db.QueryRowContext(ctx, query, targetID)
+	err := row.Scan(&log.ID, &log.TargetID, &log.EventID, &log.CurrentState, &log.CurrentResult, &log.CreatedAt, &log.UpdatedAt)
 	if err != nil {
 		return Log{}, fmt.Errorf("failed to get last log: %w", err)
 	}
@@ -58,7 +58,7 @@ func (s *stateRepo) getLastLogByTargetID(ctx context.Context, targetID string) (
 	return log.toLog(), nil
 }
 
-func (s *stateRepo) saveLog(ctx context.Context, log Log) (string, error) {
+func (s *stateRepo) createLog(ctx context.Context, log Log) (string, error) {
 	const query = `INSERT INTO fsm_target_logs (
 						target_id,
 						event_id,
@@ -75,9 +75,54 @@ func (s *stateRepo) saveLog(ctx context.Context, log Log) (string, error) {
 
 	dto := logToDTO(log)
 	var id string
-	err := s.store.db.GetContext(ctx, &id, query, dto)
+	rows, err := s.store.db.NamedQueryContext(ctx, query, dto)
 	if err != nil {
 		return "", err
+	}
+	defer rows.Close()
+
+	if rows.Next() {
+		if err := rows.Scan(&id); err != nil {
+			return "", err
+		}
+	} else {
+		return "", fmt.Errorf("no rows returned")
+	}
+
+	return id, nil
+}
+
+func (s *stateRepo) createFullLog(ctx context.Context, log Log) (string, error) {
+	const query = `INSERT INTO fsm_target_logs (
+						target_id,
+						event_id,
+						current_state,
+						current_result_status,
+						created_at,
+						updated_at
+				  	) VALUES (
+						:target_id,
+					  	:event_id,
+						:current_state,
+						:current_result_status,
+						now(), 
+						now()
+					) RETURNING id`
+
+	dto := logToDTO(log)
+	var id string
+	rows, err := s.store.db.NamedQueryContext(ctx, query, dto)
+	if err != nil {
+		return "", err
+	}
+	defer rows.Close()
+
+	if rows.Next() {
+		if err := rows.Scan(&id); err != nil {
+			return "", err
+		}
+	} else {
+		return "", fmt.Errorf("no rows returned")
 	}
 
 	return id, nil
@@ -157,12 +202,14 @@ func (s *stateRepo) getEventByID(ctx context.Context, id string) (Event, error) 
 
 func (s *stateRepo) createEvent(ctx context.Context, event Event) (string, error) {
 	const query = `INSERT INTO fsm_target_events (
+					   	id,
 						target_id,
 						last_result_status,
 						meta_info,
 						created_at,
 						updated_at
 					) VALUES (
+					    :id,
 						:entity_id,
 						:last_result_status,
 						:meta_info,
@@ -172,9 +219,18 @@ func (s *stateRepo) createEvent(ctx context.Context, event Event) (string, error
 
 	dto := eventToDTO(event)
 	var id string
-	err := s.store.db.GetContext(ctx, &id, query, dto)
+	rows, err := s.store.db.NamedQueryContext(ctx, query, dto)
 	if err != nil {
 		return "", err
+	}
+	defer rows.Close()
+
+	if rows.Next() {
+		if err := rows.Scan(&id); err != nil {
+			return "", err
+		}
+	} else {
+		return "", fmt.Errorf("no rows returned")
 	}
 
 	return id, nil

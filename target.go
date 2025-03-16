@@ -33,8 +33,9 @@ type Target[T comparable] struct {
 
 func NewTarget[T comparable](data TargetData[T]) Target[T] {
 	return Target[T]{
-		id:   data.ID(),
-		data: data,
+		id:          data.ID(),
+		data:        data,
+		stateResult: ResultStatusEmpty,
 	}
 }
 
@@ -50,7 +51,7 @@ func (e *Target[T]) event() Event {
 	return Event{
 		ID:               e.eventID,
 		TargetID:         e.data.ID(),
-		LastResultStatus: NewResultStatus(""),
+		LastResultStatus: e.stateResult,
 		MetaInfo:         e.data.MetaInfo(),
 	}
 }

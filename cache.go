@@ -3,7 +3,6 @@ package event_fsm
 import (
 	"context"
 	"encoding/json"
-	"errors"
 	"fmt"
 	"time"
 
@@ -23,9 +22,6 @@ func newRClient(rdb redis.UniversalClient) *rClient {
 func (c *rClient) Get(ctx context.Context, key string, value any) error {
 	v, err := c.rdb.Get(ctx, key).Bytes()
 	if err != nil {
-		if errors.Is(err, redis.Nil) {
-			return fmt.Errorf("rClient.Get: %w", ErrStateNotFound)
-		}
 		return fmt.Errorf("rClient.Get: %w", err)
 	}
 

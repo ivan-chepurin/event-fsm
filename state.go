@@ -45,14 +45,22 @@ func (r *ResultStatus) UnmarshalJSON(data []byte) error {
 		return fmt.Errorf("result status is empty")
 	}
 
-	*r = ResultStatus(status)
+	if _, ok := _resultStatuses[status]; !ok {
+		return fmt.Errorf("result status %s not found", status)
+	}
+
+	*r = _resultStatuses[status]
 
 	return nil
 }
 
 func (r *ResultStatus) Scan(value interface{}) error {
 	if str, ok := value.(string); ok {
-		*r = ResultStatus(str)
+		*r, ok = _resultStatuses[str]
+		if !ok {
+			return fmt.Errorf("result status %s not found", str)
+		}
+
 		return nil
 	}
 
@@ -68,8 +76,10 @@ func (r *ResultStatus) Value() (driver.Value, error) {
 }
 
 var (
-	ResultStatusFail = NewResultStatus("fail")
-	ResultStatusOk   = NewResultStatus("ok")
+	ResultStatusEmpty         = NewResultStatus("")
+	ResultStatusFail          = NewResultStatus("fail")
+	ResultStatusOk            = NewResultStatus("ok")
+	resultStatusWaitNextEvent = NewResultStatus("wait_next_event")
 )
 
 type StateType int
@@ -93,14 +103,6 @@ func NewStateName(name string) StateName {
 	_stateNames[name] = sn
 
 	return sn
-}
-
-func ToStateName(name string) StateName {
-	if sn, ok := _stateNames[name]; ok {
-		return sn
-	}
-
-	return NewStateName("")
 }
 
 func (sn *StateName) String() string {
@@ -158,17 +160,17 @@ type State[T comparable] struct {
 
 	StateType StateType
 
-	Next map[ResultStatus]*State[T]
+	Next map[string]*State[T]
 
 	Executor Executor[T]
 }
 
 func (s *State[T]) SetNext(nextState *State[T], response ResultStatus) {
-	s.Next[response] = nextState
+	s.Next[response.String()] = nextState
 }
 
 func (s *State[T]) getNext(response ResultStatus) (*State[T], error) {
-	if state, ok := s.Next[response]; ok {
+	if state, ok := s.Next[response.String()]; ok {
 		return state, nil
 	}
 	return nil, ErrStateNotFound

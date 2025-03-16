@@ -21,7 +21,7 @@ func initDB[T comparable](cfg *Config[T]) (*sqlx.DB, error) {
 		return nil, fmt.Errorf("createSchema failed: %w", err)
 	}
 
-	cfg.DBConf = fmt.Sprintf("%s&search_path=%s", cfg.DBConf, searchPath)
+	cfg.DBConf = fmt.Sprintf("%s search_path=%s", cfg.DBConf, searchPath)
 
 	if err = dbConn.Close(); err != nil {
 		return nil, fmt.Errorf("dbConn.Close failed: %w", err)

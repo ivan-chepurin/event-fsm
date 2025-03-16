@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 
+	"github.com/google/uuid"
 	"go.uber.org/zap"
 )
 
@@ -72,6 +73,7 @@ func (f *FSM[T]) ProcessEvent(ctx context.Context, t Target[T]) (Target[T], erro
 		return t, fmt.Errorf("%v: %w, state: %s", ErrStateNotFound, err, currentStateName)
 	}
 
+	t.eventID = uuid.NewString()
 	t.eventID, err = f.store.saveEvent(ctx, t.event())
 	if err != nil {
 		return t, fmt.Errorf("f.store.saveEvent: %w", err)
@@ -82,14 +84,13 @@ func (f *FSM[T]) ProcessEvent(ctx context.Context, t Target[T]) (Target[T], erro
 
 func (f *FSM[T]) processEvent(ctx context.Context, t Target[T]) (Target[T], error) {
 	var (
-		status ResultStatus
-		ok     bool
+		ok bool
 	)
 
 	for {
 		id, err := f.store.saveLog(ctx, t.log())
 		if err != nil {
-			return t, fmt.Errorf("f.store.saveLog: %w", err)
+			return t, fmt.Errorf("f.store.createLog: %w", err)
 		}
 
 		t.stateResult, err = t.state.Executor.Execute(ctx, t.data.Data())
@@ -104,18 +105,25 @@ func (f *FSM[T]) processEvent(ctx context.Context, t Target[T]) (Target[T], erro
 		}
 
 		if err = f.store.updateEvent(ctx, t.event()); err != nil {
+			return t, fmt.Errorf("f.store.updateEvent: %w", err)
 		}
 
 		if t.stateResult == ResultStatusFail {
 			return t, fmt.Errorf("state execution failed: %s", t.state.Name)
 		}
 
-		t.state, ok = f.stateDetector.getNextState(t.state, status)
+		t.state, ok = f.stateDetector.getNextState(t.state, t.stateResult)
 		if !ok {
 			return t, fmt.Errorf("no next state for %s: %w", log.CurrentStateName, ErrNoNextState)
 		}
 
 		if t.state.StateType == StateTypeWaitEvent {
+			// wait for the next event
+			t.stateResult = resultStatusWaitNextEvent
+			if _, err = f.store.createFullLog(ctx, t.log()); err != nil {
+				return t, fmt.Errorf("f.store.createLog: %w", err)
+			}
+
 			return t, nil
 		}
 	}
