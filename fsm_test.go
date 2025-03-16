@@ -69,15 +69,14 @@ func (e *eventData) SetStateName(state StateName) {
 }
 
 func (e *eventData) StateName() StateName {
-	return GetStateName(e.CurrentState)
+	return ToStateName(e.CurrentState)
 }
 
 // ResultStatus is a type for the result status of a usecase
-const (
-	Ok ResultStatus = iota + 1
-	NotEnough
-	TooMuch
-	WrongNumber
+var (
+	NotEnough   = NewResultStatus("not_enough")
+	TooMuch     = NewResultStatus("too_much")
+	WrongNumber = NewResultStatus("wrong_number")
 )
 
 // State names
@@ -112,20 +111,24 @@ func TestProcess(t *testing.T) {
 
 	firstCheck.SetNext(add3, NotEnough)
 	firstCheck.SetNext(remove2, TooMuch)
-	firstCheck.SetNext(manualAdd, Ok)
-	add3.SetNext(manualAdd, Ok)
+	firstCheck.SetNext(manualAdd, ResultStatusOk)
+	add3.SetNext(manualAdd, ResultStatusOk)
 
-	add3.SetNext(firstCheck, Ok)
-	remove2.SetNext(firstCheck, Ok)
+	add3.SetNext(firstCheck, ResultStatusOk)
+	remove2.SetNext(firstCheck, ResultStatusOk)
 
-	manualAdd.SetNext(lastCheck, Ok)
+	manualAdd.SetNext(lastCheck, ResultStatusOk)
 
 	lastCheck.SetNext(firstCheck, WrongNumber)
-	lastCheck.SetNext(printResult, Ok)
+	lastCheck.SetNext(printResult, ResultStatusOk)
 
 	sd.SetMainState(firstCheck)
 
-	fsm := NewFSM[*eventData](sd, zap.NewNop())
+	cfg := Config[*eventData]{
+		StateDetector: sd,
+	}
+
+	fsm := NewFSM(sd, zap.NewNop())
 
 	wg := sync.WaitGroup{}
 	for i, ed := range edSlice {
@@ -135,7 +138,7 @@ func TestProcess(t *testing.T) {
 
 			cacheInstance.Set("test", ed)
 
-			_, err := fsm.ProcessEvent(context.Background(), NewEvent(strconv.Itoa(i), &ed))
+			_, err := fsm.ProcessEvent(context.Background(), NewTarget(strconv.Itoa(i), &ed))
 			if err != nil {
 				t.Fatal("Error processing event:", err)
 				return
@@ -144,7 +147,7 @@ func TestProcess(t *testing.T) {
 
 			ed.ManualAdd = -20
 
-			_, err = fsm.ProcessEvent(context.Background(), NewEvent(strconv.Itoa(i), &ed))
+			_, err = fsm.ProcessEvent(context.Background(), NewTarget(strconv.Itoa(i), &ed))
 			if err != nil {
 				if !errors.Is(err, ErrNoNextState) {
 					t.Fatal("Error processing event:", err)
@@ -169,7 +172,7 @@ func (s *stateFirstCheck) Execute(ctx context.Context, data *eventData) (ResultS
 		return TooMuch, nil
 	}
 
-	return Ok, nil
+	return ResultStatusOk, nil
 }
 
 type stateAdd3 struct {
@@ -181,7 +184,7 @@ func (s *stateAdd3) Execute(ctx context.Context, data *eventData) (ResultStatus,
 
 	s.cache.Set("test", *data)
 
-	return Ok, nil
+	return ResultStatusOk, nil
 }
 
 type stateRemove2 struct {
@@ -193,7 +196,7 @@ func (s *stateRemove2) Execute(ctx context.Context, data *eventData) (ResultStat
 
 	s.cache.Set("test", *data)
 
-	return Ok, nil
+	return ResultStatusOk, nil
 }
 
 type stateManualAdd struct {
@@ -205,14 +208,14 @@ func (s *stateManualAdd) Execute(ctx context.Context, data *eventData) (ResultSt
 
 	s.cache.Set("test", *data)
 
-	return Ok, nil
+	return ResultStatusOk, nil
 }
 
 type stateLastCheck struct{}
 
 func (s *stateLastCheck) Execute(ctx context.Context, data *eventData) (ResultStatus, error) {
 	if data.Number == -10 {
-		return Ok, nil
+		return ResultStatusOk, nil
 	}
 
 	return WrongNumber, nil
@@ -226,7 +229,7 @@ func (s *statePrintResult) Execute(ctx context.Context, data *eventData) (Result
 		data.Number, data.ManualAdd,
 	)
 
-	return Ok, nil
+	return ResultStatusOk, nil
 }
 
 func TestStateName(t *testing.T) {
