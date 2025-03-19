@@ -47,27 +47,28 @@ func NewFSM[T comparable](cfg *Config[T]) (*FSM[T], error) {
 }
 
 func (f *FSM[T]) ProcessEvent(ctx context.Context, t Target[T]) (Target[T], error) {
-	var (
-		err error
-	)
-
 	// check if the target is nil
 	if t.data.IsNull() {
 		return t, fmt.Errorf("target is nil")
 	}
 
 	// determine current state
-	var currentStateName StateName
-	lastLog, err := f.store.getLastLog(ctx, t.id)
-	if err != nil {
-		if !errors.Is(err, ErrLastLogNotFound) {
-			return t, fmt.Errorf("f.store.getLastLog: %w", err)
+	currentStateName := t.getStateName()
+
+	if ok, err := checkStateName(currentStateName); !ok {
+		if errors.Is(err, ErrStateNotFound) {
+			return t, fmt.Errorf("invalid state name: %s, %w", currentStateName, ErrStateNotFound)
 		}
 
-		currentStateName = f.stateDetector.mainState.Name
-	} else {
-		currentStateName = lastLog.CurrentStateName
+		currentStateName, err = f.stateDetector.getMainState()
+		if err != nil {
+			return t, fmt.Errorf("f.stateDetector.getMainState: %w", err)
+		}
 	}
+
+	var (
+		err error
+	)
 
 	if t.state, err = f.stateDetector.stateByName(currentStateName); err != nil {
 		return t, fmt.Errorf("%v: %w, state: %s", ErrStateNotFound, err, currentStateName)
@@ -116,6 +117,8 @@ func (f *FSM[T]) processEvent(ctx context.Context, t Target[T]) (Target[T], erro
 		if !ok {
 			return t, fmt.Errorf("no next state for %s: %w", log.CurrentStateName, ErrNoNextState)
 		}
+
+		t.setStateName(t.state)
 
 		if t.state.StateType == StateTypeWaitEvent {
 			// wait for the next event
