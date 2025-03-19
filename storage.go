@@ -47,34 +47,6 @@ func (s *storage) makeKey(keyPrefix, id string) string {
 	return b.String()
 }
 
-func (s *storage) getLastLog(ctx context.Context, id string) (Log, error) {
-	// Check the cache first
-	var logDTO logDto
-	if err := s.cache.Get(ctx, s.makeKey(logKeyPrefix, id), &logDTO); err != nil {
-		if !errors.Is(err, redis.Nil) {
-			s.l.Error("getLastLog.s.cache.Get", zap.String("key", s.makeKey(logKeyPrefix, id)), zap.Error(err))
-		}
-	} else {
-		return logDTO.toLog(), nil
-	}
-
-	log, err := s.db.getLastLogByTargetID(ctx, id)
-	if err != nil {
-		if errors.Is(err, sql.ErrNoRows) {
-			return Log{}, ErrLastLogNotFound
-		}
-
-		return Log{}, fmt.Errorf("db.getLastLogByTargetID: %w", err)
-	}
-
-	// Save the log to cache
-	if err := s.cache.Set(ctx, s.makeKey(logKeyPrefix, id), logToDTO(log), cacheTTL); err != nil {
-		s.l.Error("getLastLog.cache.Set", zap.String("key", s.makeKey(logKeyPrefix, id)), zap.Error(err))
-	}
-
-	return log, nil
-}
-
 func (s *storage) saveLog(ctx context.Context, log Log) (string, error) {
 	// Save the log to the database
 	id, err := s.db.createLog(ctx, log)

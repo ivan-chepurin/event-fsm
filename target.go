@@ -16,6 +16,12 @@ type TargetData[T comparable] interface {
 	// You need to use the user ID, or any other object whose state is tracked by the FSM.
 	ID() string
 
+	// GetState returns the state of the object, whose state is being processed
+	GetState() StateName
+
+	// SetState sets the state of the object, whose state is being processed
+	SetState(state StateName)
+
 	// MetaInfo additional information about the event of the object, JSON format
 	MetaInfo() json.RawMessage
 }
@@ -65,6 +71,14 @@ func (e *Target[T]) log() Log {
 		CreatedAt:           time.Now(),
 		UpdatedAt:           time.Now(),
 	}
+}
+
+func (e *Target[T]) setStateName(state *State[T]) {
+	e.data.SetState(state.Name)
+}
+
+func (e *Target[T]) getStateName() StateName {
+	return e.data.GetState()
 }
 
 func (e *Target[T]) currentStateName() StateName {

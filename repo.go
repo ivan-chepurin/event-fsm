@@ -33,31 +33,6 @@ func newRepo(store *dbStore) *stateRepo {
 	}
 }
 
-func (s *stateRepo) getLastLogByTargetID(ctx context.Context, targetID string) (Log, error) {
-	const query = `
-		SELECT 
-			id,	
-			target_id,
-			event_id,
-			current_state,
-			current_result_status,
-			created_at,
-			updated_at 
-		FROM fsm_target_logs 
-		WHERE target_id = $1 
-		ORDER BY created_at DESC LIMIT 1
-	`
-
-	var log logDto
-	row := s.store.db.QueryRowContext(ctx, query, targetID)
-	err := row.Scan(&log.ID, &log.TargetID, &log.EventID, &log.CurrentState, &log.CurrentResult, &log.CreatedAt, &log.UpdatedAt)
-	if err != nil {
-		return Log{}, fmt.Errorf("failed to get last log: %w", err)
-	}
-
-	return log.toLog(), nil
-}
-
 func (s *stateRepo) createLog(ctx context.Context, log Log) (string, error) {
 	const query = `INSERT INTO fsm_target_logs (
 						target_id,

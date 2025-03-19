@@ -2,8 +2,8 @@ package event_fsm
 
 // StateDetector is a state detector
 type StateDetector[T comparable] struct {
-	states    map[string]*State[T]
-	mainState *State[T]
+	states        map[string]*State[T]
+	mainStateName StateName
 }
 
 func NewStateDetector[T comparable]() *StateDetector[T] {
@@ -28,15 +28,15 @@ func (sd *StateDetector[T]) NewState(name StateName, executor Executor[T], state
 	return state
 }
 
-func (sd *StateDetector[T]) SetMainState(state *State[T]) {
-	sd.mainState = state
+func (sd *StateDetector[T]) SetMainState(state StateName) {
+	sd.mainStateName = state
 }
 
-func (sd *StateDetector[T]) getMainState() (*State[T], error) {
-	if sd.mainState == nil {
-		return nil, ErrMainStateNotFound
+func (sd *StateDetector[T]) getMainState() (StateName, error) {
+	if sd.mainStateName.String() == "" {
+		return "", ErrMainStateNotFound
 	}
-	return sd.mainState, nil
+	return sd.mainStateName, nil
 }
 
 func (sd *StateDetector[T]) stateByName(name StateName) (*State[T], error) {

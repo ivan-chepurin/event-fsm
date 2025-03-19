@@ -47,6 +47,7 @@ type eventData struct {
 	InitNumber int
 	Number     int
 	ManualAdd  int
+	StateName  StateName
 }
 
 func newEventData(initData int) eventData {
@@ -63,6 +64,14 @@ func (e *eventData) Data() *eventData {
 
 func (e *eventData) IsNull() bool {
 	return e == nil
+}
+
+func (e *eventData) GetState() StateName {
+	return e.StateName
+}
+
+func (e *eventData) SetState(state StateName) {
+	e.StateName = state
 }
 
 func (e *eventData) ID() string {
@@ -111,6 +120,8 @@ func TestProcess(t *testing.T) {
 	sd := NewStateDetector[*eventData]()
 
 	firstCheck := sd.NewState(StateFirstCheck, &stateFirstCheck{}, StateTypeTransition)
+	sd.SetMainState(StateFirstCheck)
+
 	add3 := sd.NewState(StateAdd3, &stateAdd3{cache: cacheInstance}, StateTypeTransition)
 	remove2 := sd.NewState(StateRemove2, &stateRemove2{cache: cacheInstance}, StateTypeTransition)
 	manualAdd := sd.NewState(StateManualAdd, &stateManualAdd{cache: cacheInstance}, StateTypeWaitEvent)
@@ -130,7 +141,6 @@ func TestProcess(t *testing.T) {
 	lastCheck.SetNext(firstCheck, WrongNumber)
 	lastCheck.SetNext(printResult, ResultStatusOk)
 
-	sd.SetMainState(firstCheck)
 	zap.NewNop().Error("State detector initialized")
 	cfg := &Config[*eventData]{
 		Logger:        zap.NewNop(),
