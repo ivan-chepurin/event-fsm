@@ -46,7 +46,7 @@ func NewTarget[T comparable](data TargetData[T]) Target[T] {
 }
 
 func (e *Target[T]) Data() (T, bool) {
-	return e.data.Data(), e.data.IsNull()
+	return e.data.Data(), !e.data.IsNull()
 }
 
 func (e *Target[T]) ID() string {

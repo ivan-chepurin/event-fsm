@@ -170,7 +170,7 @@ func TestProcess(t *testing.T) {
 
 			cacheInstance.Set("test", ed)
 
-			_, err := fsm.ProcessEvent(context.Background(), NewTarget(&ed))
+			target, err := fsm.ProcessEvent(context.Background(), NewTarget(&ed))
 			if err != nil {
 				if errors.Is(err, ErrNoNextState) {
 					t.Log("For test need to clean data base and redis")
@@ -180,6 +180,11 @@ func TestProcess(t *testing.T) {
 				t.Fatal("Error processing event:", err.Error())
 				return
 
+			}
+
+			if _, ok := target.Data(); !ok {
+				t.Fatal("Data is nil")
+				return
 			}
 
 			ed.ManualAdd = -20
