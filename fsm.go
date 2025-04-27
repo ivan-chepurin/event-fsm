@@ -83,7 +83,15 @@ func (f *FSM[T]) ProcessEvent(ctx context.Context, t Target[T]) (Target[T], erro
 	return f.processEvent(ctx, t)
 }
 
-func (f *FSM[T]) processEvent(ctx context.Context, t Target[T]) (Target[T], error) {
+func (f *FSM[T]) processEvent(ctx context.Context, t Target[T]) (nt Target[T], err error) {
+	defer func() {
+		if err := recover(); err != nil {
+			f.l.Error("panic in FSM", zap.Any("err", err))
+
+			nt = t
+		}
+	}()
+
 	var (
 		ok bool
 	)
