@@ -70,8 +70,10 @@ func (e *eventData) GetState() StateName {
 	return e.StateName
 }
 
-func (e *eventData) SetState(state StateName) {
+func (e *eventData) SetState(ctx context.Context, state StateName) error {
 	e.StateName = state
+
+	return nil
 }
 
 func (e *eventData) ID() string {
