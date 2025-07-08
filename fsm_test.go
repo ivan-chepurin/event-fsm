@@ -70,9 +70,13 @@ func (e *eventData) GetState() StateName {
 	return e.StateName
 }
 
-func (e *eventData) SetState(ctx context.Context, state StateName) error {
+func (e *eventData) SetState(state StateName) {
 	e.StateName = state
+}
 
+func (e *eventData) Save(ctx context.Context) error {
+	// Simulate saving to a database or cache
+	// In a real implementation, this would involve actual database operations
 	return nil
 }
 

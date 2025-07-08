@@ -126,8 +126,10 @@ func (f *FSM[T]) processEvent(ctx context.Context, t Target[T]) (nt Target[T], e
 			return t, fmt.Errorf("no next state for %s: %w", log.CurrentStateName, ErrNoNextState)
 		}
 
-		if err = t.setStateName(ctx, t.state); err != nil {
-			return t, fmt.Errorf("t.setStateName: %w", err)
+		t.setStateName(t.state)
+
+		if err = t.save(ctx); err != nil {
+			return t, fmt.Errorf("t.save: %w", err)
 		}
 
 		if t.state.StateType == StateTypeWaitEvent {

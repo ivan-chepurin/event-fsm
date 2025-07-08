@@ -21,7 +21,10 @@ type TargetData[T comparable] interface {
 	GetState() StateName
 
 	// SetState sets the state of the object, whose state is being processed
-	SetState(ctx context.Context, state StateName) error
+	SetState(state StateName)
+
+	// Save saves the current state of the object, whose state is being processed
+	Save(ctx context.Context) error
 
 	// MetaInfo additional information about the event of the object, JSON format
 	MetaInfo() json.RawMessage
@@ -74,8 +77,16 @@ func (e *Target[T]) log() Log {
 	}
 }
 
-func (e *Target[T]) setStateName(ctx context.Context, state *State[T]) error {
-	return e.data.SetState(ctx, state.Name)
+func (e *Target[T]) setStateName(state *State[T]) {
+	e.data.SetState(state.Name)
+}
+
+func (e *Target[T]) save(ctx context.Context) error {
+	if err := e.data.Save(ctx); err != nil {
+		return err
+	}
+
+	return nil
 }
 
 func (e *Target[T]) getStateName() StateName {
