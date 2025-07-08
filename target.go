@@ -1,6 +1,7 @@
 package event_fsm
 
 import (
+	"context"
 	"encoding/json"
 	"time"
 )
@@ -21,6 +22,9 @@ type TargetData[T comparable] interface {
 
 	// SetState sets the state of the object, whose state is being processed
 	SetState(state StateName)
+
+	// Save saves the current state of the object, whose state is being processed
+	Save(ctx context.Context) error
 
 	// MetaInfo additional information about the event of the object, JSON format
 	MetaInfo() json.RawMessage
@@ -75,6 +79,14 @@ func (e *Target[T]) log() Log {
 
 func (e *Target[T]) setStateName(state *State[T]) {
 	e.data.SetState(state.Name)
+}
+
+func (e *Target[T]) save(ctx context.Context) error {
+	if err := e.data.Save(ctx); err != nil {
+		return err
+	}
+
+	return nil
 }
 
 func (e *Target[T]) getStateName() StateName {
