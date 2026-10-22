@@ -1,6 +1,6 @@
 module github.com/ivan-chepurin/event-fsm
 
-go 1.23
+go 1.26
 
 require (
 	github.com/golang-migrate/migrate/v4 v4.18.2

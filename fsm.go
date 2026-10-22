@@ -13,10 +13,19 @@ const (
 	searchPath = "fsm"
 )
 
+// eventStore is the part of storage used by FSM, extracted for testing.
+type eventStore interface {
+	saveEvent(ctx context.Context, event Event) (string, error)
+	updateEvent(ctx context.Context, event Event) error
+	saveLog(ctx context.Context, log Log) (string, error)
+	createFullLog(ctx context.Context, log Log) (string, error)
+	updateLog(ctx context.Context, log Log) error
+}
+
 type FSM[T comparable] struct {
 	l *zap.Logger
 
-	store *storage
+	store eventStore
 
 	stateDetector *StateDetector[T]
 }
@@ -48,8 +57,8 @@ func NewFSM[T comparable](cfg *Config[T]) (*FSM[T], error) {
 
 func (f *FSM[T]) ProcessEvent(ctx context.Context, t Target[T]) (Target[T], error) {
 	// check if the target is nil
-	if t.data.IsNull() {
-		return t, fmt.Errorf("target is nil")
+	if t.data == nil || t.data.IsNull() {
+		return t, ErrTargetIsNil
 	}
 
 	// determine current state
@@ -85,10 +94,11 @@ func (f *FSM[T]) ProcessEvent(ctx context.Context, t Target[T]) (Target[T], erro
 
 func (f *FSM[T]) processEvent(ctx context.Context, t Target[T]) (nt Target[T], err error) {
 	defer func() {
-		if err := recover(); err != nil {
-			f.l.Error("panic in FSM", zap.Any("err", err))
+		if r := recover(); r != nil {
+			f.l.Error("panic in FSM", zap.Any("panic", r), zap.Stack("stack"))
 
 			nt = t
+			err = fmt.Errorf("%w: %v", ErrPanic, r)
 		}
 	}()
 
@@ -97,14 +107,19 @@ func (f *FSM[T]) processEvent(ctx context.Context, t Target[T]) (nt Target[T], e
 	)
 
 	for {
+		if err = ctx.Err(); err != nil {
+			return t, err
+		}
+
 		id, err := f.store.saveLog(ctx, t.log())
 		if err != nil {
 			return t, fmt.Errorf("f.store.createLog: %w", err)
 		}
 
-		t.stateResult, err = t.state.Executor.Execute(ctx, t.data.Data())
-		if err != nil {
-			f.l.Error("error executing state", zap.Error(err), zap.String("state", t.state.Name.String()))
+		var execErr error
+		t.stateResult, execErr = t.state.Executor.Execute(ctx, t.data.Data())
+		if execErr != nil {
+			f.l.Error("error executing state", zap.Error(execErr), zap.String("state", t.state.Name.String()))
 		}
 
 		log := t.log()
@@ -118,12 +133,12 @@ func (f *FSM[T]) processEvent(ctx context.Context, t Target[T]) (nt Target[T], e
 		}
 
 		if t.stateResult == ResultStatusFail {
-			return t, fmt.Errorf("state execution failed: %s", t.state.Name)
+			return t, withExecErr(fmt.Errorf("state execution failed: %s: %w", t.state.Name, ErrStateFailed), execErr)
 		}
 
 		t.state, ok = f.stateDetector.getNextState(t.state, t.stateResult)
 		if !ok {
-			return t, fmt.Errorf("no next state for %s: %w", log.CurrentStateName, ErrNoNextState)
+			return t, withExecErr(fmt.Errorf("no next state for %s: %w", log.CurrentStateName, ErrNoNextState), execErr)
 		}
 
 		t.setStateName(t.state)
@@ -142,4 +157,13 @@ func (f *FSM[T]) processEvent(ctx context.Context, t Target[T]) (nt Target[T], e
 			return t, nil
 		}
 	}
+}
+
+// withExecErr attaches the executor error, if any, to the FSM error.
+func withExecErr(err, execErr error) error {
+	if execErr == nil {
+		return err
+	}
+
+	return fmt.Errorf("%w: executor error: %w", err, execErr)
 }

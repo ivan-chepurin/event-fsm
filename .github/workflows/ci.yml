@@ -1,0 +1,54 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  lint:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+      - run: go vet ./...
+      - run: go vet -tags integration ./...
+      - uses: golangci/golangci-lint-action@v6
+        with:
+          version: v1.64.8
+          args: --build-tags integration
+
+  test:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: user
+          POSTGRES_PASSWORD: qwerty
+          POSTGRES_DB: fsm_test_db
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U user -d fsm_test_db"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+      redis:
+        image: redis:7-alpine
+        ports:
+          - 6379:6379
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+      - name: Unit tests
+        run: go test -race -count=1 ./...
+      - name: Integration tests
+        env:
+          FSM_TEST_DB_DSN: host=localhost port=5432 user=user password=qwerty dbname=fsm_test_db sslmode=disable
+          FSM_TEST_REDIS_PASSWORD: ""
+        run: go test -race -count=1 -tags integration ./...

@@ -2,7 +2,6 @@ package event_fsm
 
 import (
 	"context"
-	"database/sql"
 	"fmt"
 	"time"
 
@@ -11,8 +10,6 @@ import (
 
 type dbStore struct {
 	db *sqlx.DB
-
-	stateRepo
 }
 
 func newDBStore(db *sqlx.DB) *dbStore {
@@ -120,6 +117,8 @@ func (s *stateRepo) updateLog(ctx context.Context, log Log) error {
 
 // deleteLogs deletes logs older than the specified duration,
 // keeping the last 'keepCount' logs for each 'id' (source).
+//
+//nolint:unused // will be exposed through the public read API
 func (s *stateRepo) deleteLogs(ctx context.Context, duration time.Duration, keepCount int) error {
 	const query = `
 		DELETE FROM fsm_target_logs
@@ -144,17 +143,7 @@ func (s *stateRepo) deleteLogs(ctx context.Context, duration time.Duration, keep
 	return nil
 }
 
-// CREATE TABLE IF NOT EXISTS fsm_target_events (
-//
-//	id UUID PRIMARY KEY DEFAULT public.uuid_generate_v4(),
-//	entity_id VARCHAR NOT NULL,
-//	cur_state VARCHAR NOT NULL,
-//	result_status VARCHAR NOT NULL,
-//	meta_info JSONB,
-//	created_at TIMESTAMPTZ DEFAULT now(),
-//	updated_at TIMESTAMPTZ DEFAULT now()
-//
-// );
+//nolint:unused // will be exposed through the public read API
 func (s *stateRepo) getEventByID(ctx context.Context, id string) (Event, error) {
 	const query = `	SELECT
 						id,
@@ -185,7 +174,7 @@ func (s *stateRepo) createEvent(ctx context.Context, event Event) (string, error
 						updated_at
 					) VALUES (
 					    :id,
-						:entity_id,
+						:target_id,
 						:last_result_status,
 						:meta_info,
 						now(),
@@ -224,33 +213,4 @@ func (s *stateRepo) updateEvent(ctx context.Context, event Event) error {
 	}
 
 	return nil
-}
-
-// sqlClient - common interface for *sqlx.DB and *sqlx.TX
-// https://gist.github.com/hielfx/4469d35127d085fc3501d483e34d4bad
-//
-//nolint:interfacebloat
-type sqlClient interface {
-	BindNamed(query string, arg interface{}) (string, []interface{}, error)
-	DriverName() string
-	Get(dest interface{}, query string, args ...interface{}) error
-	GetContext(ctx context.Context, dest interface{}, query string, args ...interface{}) error
-	MustExec(query string, args ...interface{}) sql.Result
-	Exec(query string, args ...interface{}) (sql.Result, error)
-	ExecContext(ctx context.Context, query string, args ...interface{}) (sql.Result, error)
-	MustExecContext(ctx context.Context, query string, args ...interface{}) sql.Result
-	NamedExec(query string, arg interface{}) (sql.Result, error)
-	NamedExecContext(ctx context.Context, query string, arg interface{}) (sql.Result, error)
-	NamedQuery(query string, arg interface{}) (*sqlx.Rows, error)
-	PrepareNamed(query string) (*sqlx.NamedStmt, error)
-	PrepareNamedContext(ctx context.Context, query string) (*sqlx.NamedStmt, error)
-	Preparex(query string) (*sqlx.Stmt, error)
-	PreparexContext(ctx context.Context, query string) (*sqlx.Stmt, error)
-	QueryRowx(query string, args ...interface{}) *sqlx.Row
-	QueryRowxContext(ctx context.Context, query string, args ...interface{}) *sqlx.Row
-	Queryx(query string, args ...interface{}) (*sqlx.Rows, error)
-	QueryxContext(ctx context.Context, query string, args ...interface{}) (*sqlx.Rows, error)
-	Rebind(query string) string
-	Select(dest interface{}, query string, args ...interface{}) error
-	SelectContext(ctx context.Context, dest interface{}, query string, args ...interface{}) error
 }

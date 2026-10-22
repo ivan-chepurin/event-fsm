@@ -97,6 +97,7 @@ func (s *storage) updateLog(ctx context.Context, log Log) error {
 	return nil
 }
 
+//nolint:unused // will be exposed through the public read API
 func (s *storage) getEvent(ctx context.Context, id string) (Event, error) {
 	// Check the cache first
 	var eventDTO eventDto
