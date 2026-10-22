@@ -34,8 +34,8 @@ func NewStateName(name string) StateName {
 	return sn
 }
 
-func (sn *StateName) String() string {
-	return string(*sn)
+func (sn StateName) String() string {
+	return string(sn)
 }
 
 // MarshalJSON check if state name is valid or not before marshalling with Alias

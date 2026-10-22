@@ -36,6 +36,7 @@ func logToDTO(log Log) logDto {
 	}
 }
 
+//nolint:unused // will be exposed through the public read API
 func (l *logDto) toLog() Log {
 	return Log{
 		ID:                  l.ID,

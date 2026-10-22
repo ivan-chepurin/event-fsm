@@ -127,7 +127,7 @@ var migrations = []migrationData{
 			BEGIN;
 			
 			CREATE TABLE IF NOT EXISTS fsm_target_events (
-				id UUID PRIMARY KEY DEFAULT public.uuid_generate_v4(),
+				id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
 				target_id VARCHAR NOT NULL,
 				last_result_status VARCHAR NOT NULL,
 				meta_info JSONB,
@@ -139,7 +139,7 @@ var migrations = []migrationData{
 			CREATE INDEX IF NOT EXISTS fsm_target_events_target_id_idx ON fsm_target_events (target_id);
 			
 			CREATE TABLE IF NOT EXISTS fsm_target_logs (
-				id UUID PRIMARY KEY DEFAULT public.uuid_generate_v4(),
+				id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
 				target_id VARCHAR NOT NULL,
 				event_id UUID NOT NULL,
 				current_state VARCHAR NOT NULL,

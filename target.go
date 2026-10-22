@@ -42,6 +42,10 @@ type Target[T comparable] struct {
 }
 
 func NewTarget[T comparable](data TargetData[T]) Target[T] {
+	if data == nil || data.IsNull() {
+		return Target[T]{data: data, stateResult: ResultStatusEmpty}
+	}
+
 	return Target[T]{
 		id:          data.ID(),
 		data:        data,
@@ -50,7 +54,12 @@ func NewTarget[T comparable](data TargetData[T]) Target[T] {
 }
 
 func (e *Target[T]) Data() (T, bool) {
-	return e.data.Data(), !e.data.IsNull()
+	if e.data == nil || e.data.IsNull() {
+		var zero T
+		return zero, false
+	}
+
+	return e.data.Data(), true
 }
 
 func (e *Target[T]) ID() string {
@@ -91,18 +100,6 @@ func (e *Target[T]) save(ctx context.Context) error {
 
 func (e *Target[T]) getStateName() StateName {
 	return e.data.GetState()
-}
-
-func (e *Target[T]) currentStateName() StateName {
-	return e.state.Name
-}
-
-func (e *Target[T]) nextStateName(status ResultStatus) (StateName, error) {
-	if state, err := e.state.getNext(status); err == nil {
-		return state.Name, nil
-	} else {
-		return "", err
-	}
 }
 
 type Result struct {

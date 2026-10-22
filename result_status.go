@@ -22,8 +22,8 @@ func NewResultStatus(status string) ResultStatus {
 	return rs
 }
 
-func (r *ResultStatus) String() string {
-	return string(*r)
+func (r ResultStatus) String() string {
+	return string(r)
 }
 
 func (r *ResultStatus) MarshalJSON() ([]byte, error) {
